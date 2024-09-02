@@ -71,6 +71,7 @@ export class ActionsRegistry {
     url: string | URL,
     type: LookupType = 'action',
   ): RegisteredEntity | null {
+    console.log('lookup', url, type);
     if (type === 'action') {
       return this.lookupAction(url);
     }
@@ -90,6 +91,12 @@ export class ActionsRegistry {
     try {
       const urlObj = new URL(url);
       const host = urlObj.host;
+      // wildcard host
+      if (host.endsWith('.blink')) {
+        return this.actionsByHost[host] ?? null;
+      }
+
+      console.log("actionsByHost", this.actionsByHost, this.actionsByHost[host]);
       return this.actionsByHost[host] ?? null;
     } catch (e) {
       console.error(
@@ -104,6 +111,8 @@ export class ActionsRegistry {
     try {
       const urlObj = new URL(url);
       const host = urlObj.host;
+
+      console.log("websitesByHost", this.websitesByHost, this.websitesByHost[host]);
       return this.websitesByHost[host] ?? null;
     } catch (e) {
       console.error(
@@ -118,6 +127,8 @@ export class ActionsRegistry {
     try {
       const urlObj = new URL(url);
       const host = urlObj.host;
+
+      console.log("interstitialsByHost", this.interstitialsByHost, this.interstitialsByHost[host]);
       return this.interstitialsByHost[host] ?? null;
     } catch (e) {
       console.error(
@@ -168,9 +179,19 @@ export const getExtendedActionState = (
 };
 
 export const getExtendedWebsiteState = (url: string): ExtendedActionState => {
-  return (
-    ActionsRegistry.getInstance().lookup(url, 'website')?.state ?? 'unknown'
-  );
+  try {
+    console.log('url', url);
+    const urlObj = new URL(url);
+    console.log('urlObj', urlObj);
+    if (urlObj.hostname.endsWith('.blink')) {
+      console.log('trusted');
+      return 'trusted';
+    }
+  } catch (e) {
+    console.error(`[@dialectlabs/blinks] Invalid URL: ${url}`, e);
+  }
+  
+  return ActionsRegistry.getInstance().lookup(url, 'website')?.state ?? 'unknown';
 };
 
 export const getExtendedInterstitialState = (

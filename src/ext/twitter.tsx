@@ -22,8 +22,8 @@ type ObserverSecurityLevel = SecurityLevel;
 export interface ObserverOptions {
   // trusted > unknown > malicious
   securityLevel:
-    | ObserverSecurityLevel
-    | Record<'websites' | 'interstitials' | 'actions', ObserverSecurityLevel>;
+  | ObserverSecurityLevel
+  | Record<'websites' | 'interstitials' | 'actions', ObserverSecurityLevel>;
   supportStrategy: ActionSupportStrategy;
 }
 
@@ -119,6 +119,18 @@ async function handleNewNode(
     return;
   }
 
+  // wildcard blink for web3 domains
+  let _wildcardBlink: boolean | undefined = false;
+
+  // const domain: string | null = findWeb3Domain(element);
+  // console.log('domain', domain);
+  const domain = findWeb3Domain(element);
+  if (domain) {
+    _wildcardBlink = true;
+  }
+
+  // wildcard blink logic ends
+
   let anchor;
 
   const linkPreview = findLinkPreview(element);
@@ -144,9 +156,21 @@ async function handleNewNode(
 
   if (!anchor || !container) return;
 
+  console.log('anchor', anchor);
+  console.log('container', container);
+
   const shortenedUrl = anchor.href;
-  const actionUrl = await resolveTwitterShortenedUrl(shortenedUrl);
+  console.log('shortenedUrl', shortenedUrl);
+  let actionUrl;
+  console.log('actionUrl', actionUrl);
+  if (_wildcardBlink) {
+    actionUrl = new URL(`https://dial.to/?action=solana-action:https://alldomains.id/api/actions/${domain?.tld}`);
+    console.log('new actionUrl', actionUrl);
+  } else {
+    actionUrl = await resolveTwitterShortenedUrl(shortenedUrl);
+  }
   const interstitialData = isInterstitial(actionUrl);
+  console.log('interstitialData', interstitialData);
 
   let actionApiUrl: string | null;
   if (interstitialData.isInterstitial) {
@@ -179,6 +203,7 @@ async function handleNewNode(
   }
 
   const state = actionApiUrl ? getExtendedActionState(actionApiUrl) : null;
+
   if (
     !actionApiUrl ||
     !state ||
@@ -196,6 +221,8 @@ async function handleNewNode(
   if (!action) {
     return;
   }
+
+  // Create the action container
 
   const { container: actionContainer, reactRoot } = createAction({
     originalUrl: actionUrl,
@@ -234,6 +261,9 @@ function createAction({
   options: NormalizedObserverOptions;
   isInterstitial: boolean;
 }) {
+
+  console.log("createAction", originalUrl, action, callbacks, options, isInterstitial);
+
   const container = document.createElement('div');
   container.className = 'dialect-action-root-container';
 
@@ -306,11 +336,55 @@ function findLinkPreview(element: Element) {
   return anchor ? { anchor, card } : null;
 }
 
+function findWeb3Domain(element: Element) {
+  const tweetText = findElementByTestId(element, 'tweetText');
+  if (!tweetText) {
+    return null;
+  }
+
+  const text = tweetText.textContent;
+  if (text) {
+    const regex = /\b(\w+\.(blink|id|bonk|letsbonk|zk|wen|slam|gm|eyekon|slerf|way|vibe|wifhat|leo|wassie|poor|id|samo|moon|saga|opos|monke|based|btc|myro|ser|superteam|syndicate|hub|defi|goat|anon|shgc|jpeg|chad|bern|hodl|maxi|manlet|dude|basc|bozo|madlads|wao|usa|yogg|god|gem|rare|fren|punk|pine|meta|rollbit|dks))\b/g;
+    let match;
+    let lastIndex = 0;
+    let tld: string | undefined;
+    const fragments = [];
+
+    while ((match = regex.exec(text)) !== null) {
+      const [_fullMatch, domain, _tld] = match;
+      tld = _tld;
+      fragments.push(text.slice(lastIndex, match.index));
+
+      const anchor = document.createElement('a') as HTMLAnchorElement;
+      anchor.href = `https://dial.to/?action=solana-action:https://alldomains.id/api/actions/${tld}`;
+      anchor.textContent = domain;
+      anchor.target = '_blank';
+      anchor.style.display = 'none';
+
+      fragments.push(anchor.outerHTML);
+      lastIndex = regex.lastIndex;
+    }
+
+    if (fragments.length > 0) {
+      fragments.push(text.slice(lastIndex));
+      tweetText.innerHTML = fragments.join('');
+      return { modified: true, tweetText, tld };
+    }
+  }
+  return null;
+}
+
 function findLastLinkInText(element: Element) {
   const tweetText = findElementByTestId(element, 'tweetText');
   if (!tweetText) {
     return null;
   }
+
+  // if (wildCardDomain) {
+  //   const anchor = document.createElement('a') as HTMLAnchorElement;
+  //   anchor.href = wildCardDomain;
+  //   return { anchor, tweetText };
+  // }
 
   const links = tweetText.getElementsByTagName('a');
   if (links.length > 0) {
